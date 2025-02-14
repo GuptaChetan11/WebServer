@@ -1,52 +1,53 @@
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.function.Consumer;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class Server {
+    private final ExecutorService threadPool;
 
-    int cnt = 0;
+    public Server(int poolSize) {
+        this.threadPool = Executors.newFixedThreadPool(poolSize);
+    }
 
-    public Consumer<Socket> getConsumer() {
-        return (clientSocket) -> {
-            try (PrintWriter toSocket = new PrintWriter(clientSocket.getOutputStream(), true)) {
-                cnt++;
-                toSocket.println(cnt + " Hello from the Server " + clientSocket.getInetAddress());
-            } catch (IOException ex) {
-                ex.printStackTrace();
-            }
-        };
+    public void handleClient(Socket clientSocket) {
+        //socket === client
+        try (PrintWriter toSocket = new PrintWriter(clientSocket.getOutputStream(), true);
+        BufferedReader fromSocket = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()))) {
+            toSocket.println("Hello from server " + clientSocket.getInetAddress());
+            String line = fromSocket.readLine();
+            System.out.println(line);
+        } catch (IOException ex) {
+            ex.printStackTrace();
+        }
     }
 
     public static void main(String[] args) {
         int port = 8010;
-        Server server = new Server();
-        ServerSocket serverSocket = null;
+        int poolSize = 10; // we can adjust this pool size according to our needs
+        Server server = new Server(poolSize);
+
         try {
-            serverSocket = new ServerSocket(port);
-            serverSocket.setSoTimeout(70000);
-            System.out.println("Server is listening on port: " + port);
-            while (true) {
-                Socket clienSocket = serverSocket.accept();
+            try (ServerSocket serverSocket = new ServerSocket(port)) {
+                serverSocket.setSoTimeout(60000); //timeout set to 60s
+                System.out.println("Server is listening on port " + port);
 
-                // create and start a new thread for each client
-                Thread thread = new Thread(() -> server.getConsumer().accept(clienSocket));
-                thread.start();
+                while (true) {
+                    Socket clientSocket = serverSocket.accept();
 
-            }
-        } catch (IOException ex) {
-            System.out.println("Server exception: " + ex.getMessage());
-            ex.printStackTrace();
-        } finally {
-            if (serverSocket != null && !serverSocket.isClosed()) {
-                try {
-                    serverSocket.close();
-                    System.out.println("server is closed");
-                } catch (IOException ex) {
-                    ex.printStackTrace();
+                    // Use the thread pool to handle the client
+                    server.threadPool.execute(() -> server.handleClient(clientSocket));
                 }
             }
+        } catch (IOException ex) {
+            ex.printStackTrace();
+        } finally {
+            // Shutdown the thread pool when the server exits
+            server.threadPool.shutdown();
         }
     }
 }
