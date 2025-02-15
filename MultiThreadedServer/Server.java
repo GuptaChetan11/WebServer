@@ -6,6 +6,7 @@ public class Server {
     private final ExecutorService threadPool;
     private static final String UPLOAD_DIR = "server_files";
     private static final int BUFFER_SIZE = 4096;
+    private boolean running = true; //state of server
 
     // Constructor initializes thread pool and creates upload directory
     public Server(int poolSize) {
@@ -122,6 +123,10 @@ public class Server {
         System.out.println("file download completed successfully: " + fileName);
     }
 
+    //to automatically shutdown server
+    public void shutdown(){
+        running = false;
+    }
     public static void main(String[] args) {
         int port = 8010;
         int poolSize = 10;
@@ -131,13 +136,14 @@ public class Server {
             serverSocket.setSoTimeout(60000); // 1 minute timeout
             System.out.println("Server is listening on port: " + port);
 
-            while (true) {
+            while (server.running) {
                 try {
                     Socket clientSocket = serverSocket.accept();
                     // Handle each client in a separate thread from the pool
                     server.threadPool.execute(() -> server.handleClient(clientSocket));
                 } catch (SocketTimeoutException e) {
                     System.out.println("No client connected in the last minute");
+                    server.shutdown();
                 }
             }
         } catch (IOException ex) {
@@ -145,6 +151,7 @@ public class Server {
             ex.printStackTrace();
         } finally {
             server.threadPool.shutdown();
+            System.out.println("server shutdown completed");
         }
     }
 }
